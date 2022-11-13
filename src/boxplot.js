@@ -4,11 +4,18 @@ function boxplot(
     category,
     target,
     range,
+    title = "",
     plot_size = 400,
     colors = HSV_CONF.colors,
 ) {
+    // handle args
+    if (title == "") {
+        title = target;
+    }
+
     // set the dimensions and margins of the graph
     const margin = { top: 10, right: 30, bottom: 30, left: 40 };
+    const padding = { top: 30, right: 0, bottom: 0, left: 0};
     const plot_width = plot_size - margin.left - margin.right;
     const plot_height = plot_size - margin.top - margin.bottom;
 
@@ -24,12 +31,12 @@ function boxplot(
     const sumstat = d3.rollup( // nest function allows to group the calculation per level of a factor
         data,
         d => {
-            q1 = d3.quantile(d.map(g => g[target]).sort(d3.ascending),.25);
-            median = d3.quantile(d.map(g => g[target]).sort(d3.ascending),.5);
-            q3 = d3.quantile(d.map(g => g[target]).sort(d3.ascending),.75);
-            interQuantileRange = q3 - q1;
-            min = q1 - 1.5 * interQuantileRange;
-            max = q3 + 1.5 * interQuantileRange;
+            const q1 = d3.quantile(d.map(g => g[target]).sort(d3.ascending), .25);
+            const median = d3.quantile(d.map(g => g[target]).sort(d3.ascending), .5);
+            const q3 = d3.quantile(d.map(g => g[target]).sort(d3.ascending), .75);
+            const interQuantileRange = q3 - q1;
+            const min = q1 - 1.5 * interQuantileRange;
+            const max = q3 + 1.5 * interQuantileRange;
             return ({
                 q1: q1,
                 median: median,
@@ -40,7 +47,20 @@ function boxplot(
             });
         },
         d => d[category],
-    )
+    );
+
+    const naive_stat = {};
+    for (let category_cur of sumstat.keys()) {
+        const q1 = d3.quantile(data.filter(g => g[category] == category_cur).map(g => g[target]).sort(d3.ascending), .25);
+        const q3 = d3.quantile(data.filter(g => g[category] == category_cur).map(g => g[target]).sort(d3.ascending), .75);
+        const interQuantileRange = q3 - q1;
+        const min = q1 - 1.5 * interQuantileRange;
+        const max = q3 + 1.5 * interQuantileRange;
+        naive_stat[category_cur] = {
+            "min": min,
+            "max": max,
+        }
+    }
 
     // Show the X scale
     const x = d3.scaleBand()
@@ -55,7 +75,7 @@ function boxplot(
     // Show the Y scale
     const y = d3.scaleLinear()
         .domain(range)
-        .range([plot_height, 0]);
+        .range([plot_height, padding.top]);
     svg.append("g").call(d3.axisLeft(y));
 
     const tooltip = hsv_tooltip(selector);
@@ -122,7 +142,6 @@ function boxplot(
         .on("mouseleave", mouseleave);
 
     // Show outliers
-    // console.log(sumstat[0]);
     svg
         .selectAll("outliers")
         .data(data)
@@ -132,9 +151,11 @@ function boxplot(
         .attr("cy", d => y(d[target]))
         .attr("r", 4)
         .style("fill", "white")
-        // .style("opecity", d => {
-        //     if (sumstat[d[category]]
-        // })
+        .style("opacity", d => {
+            if (naive_stat[d[category]]["min"] <= d[target] && d[target] <= naive_stat[d[category]]["max"]) {
+                return "0%";
+            }
+        })
         .attr("stroke", "black");
 
     // Show min and max horizontal lines
@@ -164,4 +185,12 @@ function boxplot(
         .on("mouseover", mouseover)
         .on("mousemove", mousemove)
         .on("mouseleave", mouseleave);
+
+    // Show title
+    svg
+        .append("text")
+        .text(title)
+        .attr("x", (plot_width / 2) - margin.left)
+        .attr("y", margin.top)
+        .style("text-align", "center");
 }
